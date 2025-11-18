@@ -1,0 +1,73 @@
+{
+  "name": "Treasure Hunt Agent",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "agent",
+  "workspaceFolder": "/app",
+
+  // Configure container user
+  "remoteUser": "agentuser",
+  "containerUser": "agentuser",
+
+  // VS Code customizations
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-python.black-formatter"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true,
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/*.pyc": true
+        }
+      }
+    }
+  },
+
+  // Features to install
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "username": "agentuser",
+      "userUid": "1000",
+      "userGid": "1000"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+
+  // Ports to forward (none needed for this project)
+  "forwardPorts": [],
+
+  // Post-create command to set up environment
+  "postCreateCommand": "uv sync",
+
+  // Environment variables
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+
+  // Security: Run without privileged mode
+  "runArgs": [
+    "--cap-drop=ALL",
+    "--cap-add=NET_BIND_SERVICE",
+    "--security-opt=no-new-privileges"
+  ],
+
+  // Mount configuration
+  "mounts": [
+    // Mount for persistent treasure hunt data
+    "source=${localWorkspaceFolder}/treasure_hunt,target=/app/treasure_hunt,type=bind,consistency=cached"
+  ]
+}
