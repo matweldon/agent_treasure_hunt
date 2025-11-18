@@ -13,11 +13,51 @@ A parametrized treasure hunt generator for testing AI agents. Creates complex fi
 
 ## Installation
 
+### Option 1: Local Installation
+
 ```bash
 # Project uses uv for dependency management
 cd treasure_hunt_agent
 uv sync
 ```
+
+### Option 2: Docker / GitHub Codespaces (Recommended)
+
+The project includes a secure Docker container setup with sandboxing and network restrictions.
+
+#### Using GitHub Codespaces
+
+1. Fork or clone this repository to GitHub
+2. Click "Code" → "Codespaces" → "Create codespace on main"
+3. The devcontainer will automatically set up the environment
+4. Set your API key: `export GOOGLE_API_KEY='your-api-key'`
+
+#### Using Docker Locally
+
+```bash
+# Build and start the container
+docker-compose -f .devcontainer/docker-compose.yml up -d
+
+# Enter the container
+docker-compose -f .devcontainer/docker-compose.yml exec agent bash
+
+# Set your API key
+export GOOGLE_API_KEY='your-api-key-here'
+
+# Run the treasure hunt
+python examples/run_treasure_hunt.py
+```
+
+#### Security Features
+
+The Docker container includes:
+- **Non-root user execution** (UID 1000)
+- **Dropped capabilities** (minimal permissions)
+- **Network restrictions** (access only to trusted domains)
+- **Resource limits** (CPU and memory constraints)
+- **Isolated filesystem** (sandboxed environment)
+
+See [.devcontainer/SECURITY.md](.devcontainer/SECURITY.md) for detailed security documentation.
 
 ## Usage
 
@@ -160,8 +200,19 @@ The system consists of three main components:
 
 ## Next Steps
 
-- [ ] Add Docker sandboxing for secure agent execution
+- [x] Add Docker sandboxing for secure agent execution
 - [ ] Create multiple agent implementations (langchain, llm, ADK)
 - [ ] Add difficulty scaling and performance metrics
 - [ ] Implement docs/help system
 - [ ] Add cost tracking and optimization
+
+## Docker & Security
+
+This project includes a production-ready Docker setup with security best practices:
+
+- Secure devcontainer for GitHub Codespaces
+- Non-root user execution
+- Network access restricted to trusted domains
+- Comprehensive security documentation
+
+For security details, see [.devcontainer/SECURITY.md](.devcontainer/SECURITY.md).

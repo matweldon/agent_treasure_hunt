@@ -1,0 +1,68 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.eggs
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
+
+# Docker files (don't include in image)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Test files (optional - uncomment if you don't want tests in prod)
+# tests/
+# *_test.py
+# test_*.py
+
+# Treasure hunt data (will be mounted as volume)
+treasure_hunt/
+
+# Environment files
+.env
+.env.*
+*.key
+*.pem
+
+# CI/CD
+.github/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
