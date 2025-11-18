@@ -1,0 +1,64 @@
+site_name: Treasure Hunt Agent
+site_description: A parametrized treasure hunt generator for testing AI agents
+site_author: Treasure Hunt Agent Contributors
+repo_url: https://github.com/matweldon/agent_treasure_hunt
+repo_name: matweldon/agent_treasure_hunt
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.mark
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - User Guide:
+      - Generating Treasure Hunts: user-guide/generating-hunts.md
+      - Running Agents: user-guide/running-agents.md
+      - Configuration: user-guide/configuration.md
+  - API Reference:
+      - Treasure Hunt Generator: api/generator.md
+      - Game Tools: api/game-tools.md
+      - Agents: api/agents.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+      - Architecture: development/architecture.md
