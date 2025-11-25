@@ -7,7 +7,7 @@ import yaml
 from datetime import datetime
 
 
-def truncate_text(text, max_words=20):
+def truncate_text(text, max_words):
     """Truncate text to max_words and add ellipsis if needed."""
     if not text:
         return ""
@@ -17,7 +17,7 @@ def truncate_text(text, max_words=20):
     return ' '.join(words[:max_words]) + '...'
 
 
-def format_tool_call(tool):
+def format_tool_call(tool, max_words):
     """Format a tool call based on its type."""
     tool_name = tool.get('name', 'unknown')
     tool_input = tool.get('input', {})
@@ -43,6 +43,13 @@ def format_tool_call(tool):
             'tool': tool_name,
             'params': tool_input
         }
+    elif tool_name == 'Task':
+        # Sub-agent call - include description and truncated prompt
+        return {
+            'tool': 'Task (sub-agent)',
+            'description': tool_input.get('description', ''),
+            'prompt': truncate_text(tool_input.get('prompt', ''), max_words * 2)  # Give more space for Task prompts
+        }
     else:
         # Other tools - log name and simplified params
         return {
@@ -51,15 +58,23 @@ def format_tool_call(tool):
         }
 
 
-def format_tool_result(result):
+def format_tool_result(result, max_words):
     """Format a tool result - type and first few words."""
     content = result.get('content', '')
+    is_error = result.get('is_error', False)
+
     if isinstance(content, str):
-        return truncate_text(content, max_words=15)
-    return str(content)[:100]
+        truncated = truncate_text(content, max_words)
+    else:
+        truncated = str(content)[:100]
+
+    result_obj = {'result': truncated}
+    if is_error:
+        result_obj['error'] = True
+    return result_obj
 
 
-def compact_conversation(input_file, output_file):
+def compact_conversation(input_file, output_file, max_words=20):
     """Extract and compact conversation into YAML format."""
     conversation = []
     last_timestamp_day = None
@@ -93,14 +108,26 @@ def compact_conversation(input_file, output_file):
                     last_cwd = cwd
 
                 if msg_type == 'user':
-                    # Extract user message
+                    # Extract user message or tool results
                     message = obj.get('message', {})
                     content = message.get('content', '')
 
-                    # Skip tool results
                     if isinstance(content, list) and content:
+                        # Check if this is tool results
                         if content[0].get('type') == 'tool_result':
+                            # Extract tool results
+                            tool_results = []
+                            for item in content:
+                                if item.get('type') == 'tool_result':
+                                    tool_results.append(format_tool_result(item, max_words))
+
+                            if tool_results:
+                                conversation.append({
+                                    'type': 'tool_results',
+                                    'results': tool_results
+                                })
                             continue
+
                         # Extract text from text blocks
                         text_parts = [
                             item.get('text', '')
@@ -133,6 +160,8 @@ def compact_conversation(input_file, output_file):
 
                 elif msg_type == 'assistant':
                     # Extract assistant message
+                    # Check if this is a sub-agent (sidechain)
+                    is_sidechain = obj.get('isSidechain', False)
                     message = obj.get('message', {})
                     content = message.get('content', [])
 
@@ -145,10 +174,10 @@ def compact_conversation(input_file, output_file):
                         item_type = item.get('type')
 
                         if item_type == 'thinking':
-                            # Keep first 20 words of thinking
+                            # Keep first N words of thinking
                             thinking = item.get('thinking', '')
                             msg_parts.append({
-                                'thinking': truncate_text(thinking, max_words=20)
+                                'thinking': truncate_text(thinking, max_words)
                             })
 
                         elif item_type == 'text':
@@ -160,14 +189,15 @@ def compact_conversation(input_file, output_file):
                         elif item_type == 'tool_use':
                             # Format tool call
                             msg_parts.append({
-                                'tool_call': format_tool_call(item)
+                                'tool_call': format_tool_call(item, max_words)
                             })
 
                     if msg_parts:
-                        conversation.append({
-                            'type': 'assistant',
+                        msg_obj = {
+                            'type': 'assistant (sub-agent)' if is_sidechain else 'assistant',
                             'content': msg_parts
-                        })
+                        }
+                        conversation.append(msg_obj)
 
                 elif msg_type == 'system':
                     # Include system messages
@@ -198,5 +228,6 @@ def compact_conversation(input_file, output_file):
 if __name__ == '__main__':
     input_file = sys.argv[1] if len(sys.argv) > 1 else 'claude-conversation/2025-11-07.jsonl'
     output_file = sys.argv[2] if len(sys.argv) > 2 else 'conversation_compact.yaml'
+    max_words = int(sys.argv[3]) if len(sys.argv) > 3 else 20
 
-    compact_conversation(input_file, output_file)
+    compact_conversation(input_file, output_file, max_words)
