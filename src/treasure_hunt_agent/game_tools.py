@@ -59,7 +59,8 @@ def _validate_path(
 
     # Check if path escapes hunt root
     try:
-        resolved.relative_to(state.treasure_hunt_root)
+        hunt_root = state.treasure_hunt_root.resolve()
+        resolved.relative_to(hunt_root)
     except ValueError:
         return "Error: Path is outside treasure hunt boundary"
 
@@ -155,7 +156,7 @@ def cd(state: Any, path: str) -> str:
 
     # Return relative path for confirmation
     try:
-        rel_path = resolved.relative_to(state.treasure_hunt_root)
+        rel_path = resolved.relative_to(state.treasure_hunt_root.resolve())
         if str(rel_path) == ".":
             return "Changed directory to: / (hunt root)"
         return f"Changed directory to: {rel_path}"
@@ -219,7 +220,8 @@ def pwd(state: Any) -> str:
     'subdir/nested'
     """
     try:
-        rel_path = state.current_dir.relative_to(state.treasure_hunt_root)
+        current_dir = state.current_dir.resolve()
+        rel_path = current_dir.relative_to(state.treasure_hunt_root.resolve())
         if str(rel_path) == ".":
             return "/"
         return str(rel_path)

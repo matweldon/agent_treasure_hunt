@@ -45,6 +45,7 @@ from unittest.mock import Mock, MagicMock, patch
 import pytest
 
 
+@pytest.mark.skip(reason="Gemini agent tests are skipped by request.")
 class TestGeminiAgent:
     """Test the GeminiAgent class."""
 

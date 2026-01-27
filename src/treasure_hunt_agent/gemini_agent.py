@@ -273,15 +273,17 @@ class GeminiAgent:
         AgentResponse
             Parsed response with text, tool calls, and metadata
         """
-        # Extract text (if any)
-        # Note: response.text will raise an error if the response only contains function calls
+        # Extract text (if any) without triggering SDK warnings
         text = None
-        try:
-            if hasattr(response, "text"):
-                text = response.text
-        except ValueError:
-            # Response contains only function calls, no text
-            text = None
+        if response.candidates and len(response.candidates) > 0:
+            candidate = response.candidates[0]
+            parts = candidate.content.parts
+            text_parts = []
+            for part in parts:
+                if hasattr(part, "text") and part.text:
+                    text_parts.append(part.text)
+            if text_parts:
+                text = "".join(text_parts)
 
         # Extract tool calls (if any)
         tool_calls = None
