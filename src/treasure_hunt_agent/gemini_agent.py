@@ -256,8 +256,8 @@ class GeminiAgent:
             )
             parts.append(types.Part(function_response=func_response))
 
-        # Return the content with function responses
-        return types.Content(parts=parts, role="user")
+        # Return the parts directly for chat.send_message
+        return parts
 
     def _parse_response(self, response: Any) -> AgentResponse:
         """
