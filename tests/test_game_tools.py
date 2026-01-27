@@ -145,7 +145,7 @@ class TestGameTools:
 
         result = cd(game_state, "subdir")
 
-        assert game_state.current_dir == game_state.treasure_hunt_root / "subdir"
+        assert game_state.current_dir == (game_state.treasure_hunt_root / "subdir").resolve()
         assert "subdir" in result.lower()
 
     def test_cd_parent_directory_within_bounds(self, game_state):
@@ -164,7 +164,7 @@ class TestGameTools:
         # Then go back up
         result = cd(game_state, "..")
 
-        assert game_state.current_dir == game_state.treasure_hunt_root / "subdir"
+        assert game_state.current_dir == (game_state.treasure_hunt_root / "subdir").resolve()
 
     def test_cd_rejects_escape_attempt(self, game_state):
         """

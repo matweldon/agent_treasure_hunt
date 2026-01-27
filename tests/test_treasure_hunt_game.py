@@ -111,8 +111,8 @@ class TestTreasureHuntGame:
         )
 
         state = game.get_state()
-        assert state.treasure_hunt_root == hunt_path
-        assert state.current_dir == hunt_path
+        assert state.treasure_hunt_root == hunt_path.resolve()
+        assert state.current_dir == hunt_path.resolve()
         assert state.turn_number == 0
         assert state.game_over is False
         assert state.treasure_key == hunt_result['treasure_key']
