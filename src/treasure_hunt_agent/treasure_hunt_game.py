@@ -135,6 +135,44 @@ class GameResult:
     error: str | None = None
 
 
+@dataclass
+class TurnResult:
+    """
+    Result of a single turn in the treasure hunt.
+
+    Attributes
+    ----------
+    turn_number : int
+        Which turn this was
+    agent_text : str | None
+        Any text response from the agent
+    tool_calls : list[dict]
+        Tool calls made this turn (name, arguments, result)
+    needs_human_input : bool
+        Whether the agent is waiting for human input
+    pending_question : str | None
+        Question for the human (if needs_human_input)
+    game_over : bool
+        Whether the game has ended
+    game_result : GameResult | None
+        Final result (only set when game_over=True)
+    tokens_used : int
+        Tokens used this turn
+    error : str | None
+        Error message if turn failed
+    """
+
+    turn_number: int
+    agent_text: str | None
+    tool_calls: list[dict]
+    needs_human_input: bool
+    pending_question: str | None
+    game_over: bool
+    game_result: GameResult | None
+    tokens_used: int
+    error: str | None = None
+
+
 class TreasureHuntGame:
     """
     Treasure hunt game loop.
@@ -159,6 +197,17 @@ class TreasureHuntGame:
     >>> result = game.run()
     >>> print(result.success)
     True
+
+    For interactive use:
+    >>> game = TreasureHuntGame("./hunt", agent)
+    >>> while True:
+    ...     result = game.take_turn()
+    ...     print(f"Turn {result.turn_number}: {len(result.tool_calls)} tool calls")
+    ...     if result.needs_human_input:
+    ...         response = input(f"Agent asks: {result.pending_question}")
+    ...         result = game.take_turn(human_input=response)
+    ...     if result.game_over:
+    ...         break
     """
 
     def __init__(
@@ -199,6 +248,13 @@ class TreasureHuntGame:
             "ask_human": ask_human,
         }
 
+        # Turn-by-turn state
+        self._initialized = False
+        self._start_time: float = 0.0
+        self._next_input: str | list[ToolResult] | None = None
+        self._pending_human_question: str | None = None
+        self._pending_tool_results: list[ToolResult] | None = None
+
     def get_state(self) -> GameState:
         """Get current game state."""
         return self.state
@@ -207,9 +263,245 @@ class TreasureHuntGame:
         """Get tool call logs."""
         return self.tool_calls_log
 
+    def _initialize(self) -> None:
+        """Initialize the game for the first turn."""
+        if self._initialized:
+            return
+
+        self._start_time = time.time()
+        self._next_input = (
+            f"You are at the root of a treasure hunt. "
+            f"The starting file is '{self.state.start_file}'. "
+            f"Use your tools to navigate the filesystem and find the treasure key. "
+            f"When you think you have the key, use check_treasure to verify it."
+        )
+        self._initialized = True
+
+    def take_turn(self, human_input: str | None = None) -> TurnResult:
+        """
+        Execute a single turn and return the result.
+
+        Parameters
+        ----------
+        human_input : str | None
+            Response to a pending human question (if any)
+
+        Returns
+        -------
+        TurnResult
+            Result of this turn, including tool calls and whether game ended
+
+        Examples
+        --------
+        >>> result = game.take_turn()
+        >>> if result.needs_human_input:
+        ...     answer = input(result.pending_question)
+        ...     result = game.take_turn(human_input=answer)
+        """
+        # Initialize on first call
+        self._initialize()
+
+        # If game is already over, return the final result
+        if self.state.game_over:
+            return TurnResult(
+                turn_number=self.state.turn_number,
+                agent_text=None,
+                tool_calls=[],
+                needs_human_input=False,
+                pending_question=None,
+                game_over=True,
+                game_result=self._build_game_result(
+                    success=self.state.success or False,
+                    end_reason="already_ended",
+                    error=None,
+                ),
+                tokens_used=0,
+            )
+
+        # If we were waiting for human input, inject it
+        if human_input is not None and self._pending_human_question is not None:
+            # Find the ask_human result and replace it
+            if self._pending_tool_results:
+                for tr in self._pending_tool_results:
+                    if tr.name == "ask_human":
+                        tr.result = human_input
+                        break
+                self._next_input = self._pending_tool_results
+            self._pending_human_question = None
+            self._pending_tool_results = None
+
+        # Check turn limit
+        if self.state.turn_number >= self.state.max_turns:
+            game_result = self._build_game_result(
+                success=False, end_reason="max_turns", error=None
+            )
+            self.state.game_over = True
+            return TurnResult(
+                turn_number=self.state.turn_number,
+                agent_text=None,
+                tool_calls=[],
+                needs_human_input=False,
+                pending_question=None,
+                game_over=True,
+                game_result=game_result,
+                tokens_used=0,
+            )
+
+        # Check token limit
+        if self.state.tokens_used >= self.state.max_tokens:
+            game_result = self._build_game_result(
+                success=False, end_reason="max_tokens", error=None
+            )
+            self.state.game_over = True
+            return TurnResult(
+                turn_number=self.state.turn_number,
+                agent_text=None,
+                tool_calls=[],
+                needs_human_input=False,
+                pending_question=None,
+                game_over=True,
+                game_result=game_result,
+                tokens_used=0,
+            )
+
+        # Increment turn
+        self.state.turn_number += 1
+
+        # Agent step
+        try:
+            response = self.agent.step(self._next_input)
+        except Exception as e:
+            game_result = self._build_game_result(
+                success=False, end_reason="error", error=f"Agent error: {e}"
+            )
+            self.state.game_over = True
+            return TurnResult(
+                turn_number=self.state.turn_number,
+                agent_text=None,
+                tool_calls=[],
+                needs_human_input=False,
+                pending_question=None,
+                game_over=True,
+                game_result=game_result,
+                tokens_used=0,
+                error=f"Agent error: {e}",
+            )
+
+        # Track token usage
+        turn_tokens = response.usage.get("total_tokens", 0)
+        self.state.tokens_used += turn_tokens
+        self.state.prompt_tokens_used += response.usage.get("prompt_tokens", 0)
+        self.state.completion_tokens_used += response.usage.get("completion_tokens", 0)
+
+        # Check token limit after this turn
+        if self.state.tokens_used >= self.state.max_tokens:
+            game_result = self._build_game_result(
+                success=False, end_reason="max_tokens", error=None
+            )
+            self.state.game_over = True
+            return TurnResult(
+                turn_number=self.state.turn_number,
+                agent_text=response.text,
+                tool_calls=[],
+                needs_human_input=False,
+                pending_question=None,
+                game_over=True,
+                game_result=game_result,
+                tokens_used=turn_tokens,
+            )
+
+        # Execute tool calls if any
+        turn_tool_calls: list[dict] = []
+        pending_question: str | None = None
+
+        if response.tool_calls:
+            tool_results = self._execute_tools(response.tool_calls)
+
+            # Collect tool call info for this turn
+            for tc in response.tool_calls:
+                # Find the matching log entry
+                for log in reversed(self.tool_calls_log):
+                    if log["turn"] == self.state.turn_number and log["name"] == tc.name:
+                        turn_tool_calls.append(log)
+                        break
+
+            # Check for ask_human call
+            for tc, tr in zip(response.tool_calls, tool_results):
+                if tc.name == "ask_human":
+                    pending_question = tc.arguments.get("question", "")
+                    self._pending_human_question = pending_question
+                    self._pending_tool_results = tool_results
+                    break
+
+            # Check if game ended during tool execution
+            if self.state.game_over:
+                game_result = self._build_game_result(
+                    success=self.state.success or False,
+                    end_reason="treasure_found" if self.state.success else "gave_up",
+                    error=None,
+                )
+                return TurnResult(
+                    turn_number=self.state.turn_number,
+                    agent_text=response.text,
+                    tool_calls=turn_tool_calls,
+                    needs_human_input=False,
+                    pending_question=None,
+                    game_over=True,
+                    game_result=game_result,
+                    tokens_used=turn_tokens,
+                )
+
+            # If waiting for human, don't advance to next input yet
+            if pending_question is None:
+                self._next_input = tool_results
+        else:
+            # No tool calls, just text response
+            self._next_input = "No tools were called. Please use your tools to explore."
+
+        return TurnResult(
+            turn_number=self.state.turn_number,
+            agent_text=response.text,
+            tool_calls=turn_tool_calls,
+            needs_human_input=pending_question is not None,
+            pending_question=pending_question,
+            game_over=False,
+            game_result=None,
+            tokens_used=turn_tokens,
+        )
+
+    def _build_game_result(
+        self, success: bool, end_reason: str, error: str | None
+    ) -> GameResult:
+        """Build a GameResult from current state."""
+        total_time = time.time() - self._start_time if self._start_time else 0.0
+
+        # Find treasure key if checked
+        treasure_key_found = None
+        for log in self.tool_calls_log:
+            if log["name"] == "check_treasure":
+                treasure_key_found = log["arguments"].get("key")
+                break
+
+        return GameResult(
+            success=success,
+            turns_taken=self.state.turn_number,
+            treasure_key_found=treasure_key_found,
+            total_tokens=self.state.tokens_used,
+            prompt_tokens=self.state.prompt_tokens_used,
+            completion_tokens=self.state.completion_tokens_used,
+            total_time=total_time,
+            tool_calls=self.tool_calls_log,
+            final_state=self.state,
+            end_reason=end_reason,
+            error=error,
+        )
+
     def run(self) -> GameResult:
         """
-        Run the game loop.
+        Run the game loop to completion.
+
+        This is the non-interactive mode that runs until the game ends.
+        For interactive/step-by-step control, use take_turn() instead.
 
         Returns
         -------
@@ -222,86 +514,10 @@ class TreasureHuntGame:
         >>> print(f"Success: {result.success}")
         Success: True
         """
-        start_time = time.time()
-
-        # Send initial message to agent
-        initial_message = (
-            f"You are at the root of a treasure hunt. "
-            f"The starting file is '{self.state.start_file}'. "
-            f"Use your tools to navigate the filesystem and find the treasure key. "
-            f"When you think you have the key, use check_treasure to verify it."
-        )
-
-        game_input: str | list[ToolResult] = initial_message
-
-        # Main game loop
-        while (
-            not self.state.game_over
-            and self.state.turn_number < self.state.max_turns
-            and self.state.tokens_used < self.state.max_tokens
-        ):
-            self.state.turn_number += 1
-
-            # Agent step
-            try:
-                response = self.agent.step(game_input)
-            except Exception as e:
-                return self._end_game(
-                    success=False,
-                    end_reason="error",
-                    error=f"Agent error: {e}",
-                    start_time=start_time,
-                )
-
-            # Track token usage
-            self.state.tokens_used += response.usage.get("total_tokens", 0)
-            self.state.prompt_tokens_used += response.usage.get("prompt_tokens", 0)
-            self.state.completion_tokens_used += response.usage.get(
-                "completion_tokens", 0
-            )
-
-            # Check token limit
-            if self.state.tokens_used >= self.state.max_tokens:
-                return self._end_game(
-                    success=False,
-                    end_reason="max_tokens",
-                    error=None,
-                    start_time=start_time,
-                )
-
-            # Execute tool calls if any
-            if response.tool_calls:
-                tool_results = self._execute_tools(response.tool_calls)
-
-                # Check if game ended during tool execution
-                if self.state.game_over:
-                    return self._end_game(
-                        success=self.state.success or False,
-                        end_reason="treasure_found"
-                        if self.state.success
-                        else "gave_up",
-                        error=None,
-                        start_time=start_time,
-                    )
-
-                # Feed results back to agent
-                game_input = tool_results
-            else:
-                # No tool calls, just text response
-                # This shouldn't happen normally, but handle it
-                game_input = "No tools were called. Please use your tools to explore."
-
-        # Loop ended without finding treasure
-        if self.state.turn_number >= self.state.max_turns:
-            end_reason = "max_turns"
-        elif self.state.tokens_used >= self.state.max_tokens:
-            end_reason = "max_tokens"
-        else:
-            end_reason = "unknown"
-
-        return self._end_game(
-            success=False, end_reason=end_reason, error=None, start_time=start_time
-        )
+        while True:
+            result = self.take_turn()
+            if result.game_over:
+                return result.game_result  # type: ignore
 
     def _execute_tools(self, tool_calls: list[Any]) -> list[ToolResult]:
         """
@@ -360,48 +576,3 @@ class TreasureHuntGame:
                     break
 
         return results
-
-    def _end_game(
-        self, success: bool, end_reason: str, error: str | None, start_time: float
-    ) -> GameResult:
-        """
-        End the game and return results.
-
-        Parameters
-        ----------
-        success : bool
-            Whether the game was successful
-        end_reason : str
-            Reason the game ended
-        error : str | None
-            Error message if any
-        start_time : float
-            When the game started
-
-        Returns
-        -------
-        GameResult
-            Final game result
-        """
-        total_time = time.time() - start_time
-
-        # Try to find treasure key if checked
-        treasure_key_found = None
-        for log in self.tool_calls_log:
-            if log["name"] == "check_treasure":
-                treasure_key_found = log["arguments"].get("key")
-                break
-
-        return GameResult(
-            success=success,
-            turns_taken=self.state.turn_number,
-            treasure_key_found=treasure_key_found,
-            total_tokens=self.state.tokens_used,
-            prompt_tokens=self.state.prompt_tokens_used,
-            completion_tokens=self.state.completion_tokens_used,
-            total_time=total_time,
-            tool_calls=self.tool_calls_log,
-            final_state=self.state,
-            end_reason=end_reason,
-            error=error,
-        )
