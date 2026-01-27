@@ -10,5 +10,15 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "google-generativeai>=0.8.5",
+    "typer>=0.15.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+treasure-hunt = "treasure_hunt_agent.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
 ]
 
