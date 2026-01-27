@@ -218,7 +218,7 @@ class TreasureHuntGame:
         max_tokens: int = 100000,
     ):
         """Initialize the game."""
-        self.hunt_path = Path(hunt_path)
+        self.hunt_path = Path(hunt_path).resolve()
         self.agent = agent
         self.tool_calls_log: list[dict] = []
 
