@@ -1,5 +1,5 @@
 """
-Gemini Agent implementation using google-generativeai SDK.
+Gemini Agent implementation using google-genai SDK.
 
 This agent manages conversation with Gemini models, handles tool calling,
 and maintains conversation history.
@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import uuid
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 @dataclass
@@ -84,7 +85,7 @@ class AgentResponse:
 
 class GeminiAgent:
     """
-    Agent that uses Gemini models via google-generativeai SDK.
+    Agent that uses Gemini models via google-genai SDK.
 
     The agent maintains conversation history, handles tool calling,
     and provides a clean interface for the game loop.
@@ -138,18 +139,19 @@ class GeminiAgent:
         self.tools = tools
         self.temperature = temperature
 
-        # Configure API
-        if api_key:
-            genai.configure(api_key=api_key)
+        # Initialize client
+        self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
         # Convert tools to Gemini format
-        gemini_tools = self._convert_tools_to_gemini_format(tools) if tools else None
+        self._gemini_tools = (
+            self._convert_tools_to_gemini_format(tools) if tools else None
+        )
 
-        # Create model
-        self.model = genai.GenerativeModel(
-            model_name=model_name,
+        # Build generation config
+        self._generation_config = types.GenerateContentConfig(
             system_instruction=system_instructions,
-            tools=gemini_tools,
+            temperature=temperature,
+            tools=self._gemini_tools,
         )
 
         # Initialize chat
@@ -161,22 +163,22 @@ class GeminiAgent:
         # Gemini expects tools in a specific format
         # For now, we'll pass them as-is and let the SDK handle it
         # The SDK expects a list of function declarations
-        from google.generativeai.types import FunctionDeclaration, Tool
-
         function_declarations = []
         for tool in tools:
-            func_decl = FunctionDeclaration(
+            func_decl = types.FunctionDeclaration(
                 name=tool["name"],
                 description=tool.get("description", ""),
                 parameters=tool.get("parameters", {}),
             )
             function_declarations.append(func_decl)
 
-        return [Tool(function_declarations=function_declarations)]
+        return [types.Tool(function_declarations=function_declarations)]
 
     def _reset_chat(self):
         """Reset the chat session."""
-        self.chat = self.model.start_chat(
+        self.chat = self.client.chats.create(
+            model=self.model_name,
+            config=self._generation_config,
             history=[],
         )
 
@@ -240,22 +242,22 @@ class GeminiAgent:
         Any
             Message in Gemini's expected format for tool results
         """
-        from google.generativeai.protos import Content, Part, FunctionResponse
-
         # Create function response parts
         parts = []
         for result in tool_results:
             # Convert result to dict if it's a string
-            result_dict = result.result if isinstance(result.result, dict) else {"output": result.result}
+            result_dict = (
+                result.result if isinstance(result.result, dict) else {"output": result.result}
+            )
 
-            func_response = FunctionResponse(
+            func_response = types.FunctionResponse(
                 name=result.name,
                 response=result_dict,
             )
-            parts.append(Part(function_response=func_response))
+            parts.append(types.Part(function_response=func_response))
 
         # Return the content with function responses
-        return Content(parts=parts, role="user")
+        return types.Content(parts=parts, role="user")
 
     def _parse_response(self, response: Any) -> AgentResponse:
         """

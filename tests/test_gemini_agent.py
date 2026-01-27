@@ -45,10 +45,6 @@ from unittest.mock import Mock, MagicMock, patch
 import pytest
 
 
-@pytest.mark.skip(
-    reason="Tests require updating mocks for google.generativeai API changes. "
-    "FunctionDeclaration and Tool are no longer exported from gemini_agent module."
-)
 class TestGeminiAgent:
     """Test the GeminiAgent class."""
 
@@ -87,25 +83,32 @@ class TestGeminiAgent:
 
     @pytest.fixture(autouse=True)
     def mock_genai(self):
-        """Mock the google.generativeai module."""
-        with patch('treasure_hunt_agent.gemini_agent.genai.GenerativeModel') as mock_model, \
-             patch('treasure_hunt_agent.gemini_agent.genai.configure') as mock_configure, \
-             patch('treasure_hunt_agent.gemini_agent.FunctionDeclaration') as mock_func_decl, \
-             patch('treasure_hunt_agent.gemini_agent.Tool') as mock_tool:
+        """Mock the google.genai module."""
+        with patch('treasure_hunt_agent.gemini_agent.genai.Client') as mock_client, \
+             patch('treasure_hunt_agent.gemini_agent.types.FunctionDeclaration') as mock_func_decl, \
+             patch('treasure_hunt_agent.gemini_agent.types.Tool') as mock_tool, \
+             patch('treasure_hunt_agent.gemini_agent.types.GenerateContentConfig') as mock_config, \
+             patch('treasure_hunt_agent.gemini_agent.types.Content') as mock_content, \
+             patch('treasure_hunt_agent.gemini_agent.types.Part') as mock_part, \
+             patch('treasure_hunt_agent.gemini_agent.types.FunctionResponse') as mock_function_response:
             # Set up mock model and chat
             mock_chat = Mock()
             mock_chat.history = []
-            mock_model.return_value.start_chat.return_value = mock_chat
+            mock_client.return_value.chats.create.return_value = mock_chat
 
             # Mock tool construction
             mock_tool.return_value = Mock()
 
             yield {
-                'GenerativeModel': mock_model,
-                'configure': mock_configure,
+                'Client': mock_client,
+                'client': mock_client.return_value,
                 'chat': mock_chat,
                 'FunctionDeclaration': mock_func_decl,
-                'Tool': mock_tool
+                'Tool': mock_tool,
+                'GenerateContentConfig': mock_config,
+                'Content': mock_content,
+                'Part': mock_part,
+                'FunctionResponse': mock_function_response,
             }
 
     def test_agent_initialization(self, sample_tools, mock_genai):
@@ -129,7 +132,7 @@ class TestGeminiAgent:
         )
 
         # Should have created a model
-        mock_genai['GenerativeModel'].assert_called_once()
+        mock_genai['Client'].assert_called_once()
 
         # Should have empty history initially
         history = agent.get_history()
@@ -162,7 +165,7 @@ class TestGeminiAgent:
 
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -211,7 +214,7 @@ class TestGeminiAgent:
 
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -253,7 +256,7 @@ class TestGeminiAgent:
 
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -301,7 +304,7 @@ class TestGeminiAgent:
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
         mock_chat.history = []
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -341,7 +344,7 @@ class TestGeminiAgent:
 
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -383,7 +386,7 @@ class TestGeminiAgent:
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
         mock_chat.history = []
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
@@ -445,7 +448,7 @@ class TestGeminiAgent:
 
         mock_chat = Mock()
         mock_chat.send_message.return_value = mock_response
-        mock_genai.GenerativeModel.return_value.start_chat.return_value = mock_chat
+        mock_genai['client'].chats.create.return_value = mock_chat
 
         agent = GeminiAgent(
             model_name="gemini-1.5-flash",
